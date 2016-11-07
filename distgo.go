@@ -1,5 +1,5 @@
 /*
-Package disgo implements a simple library for identifying the linux
+Package distgo implements a simple library for identifying the linux
 distribution you're running on.
 */
 package main
@@ -17,16 +17,36 @@ import (
 const unixEtcDir string = "/etc"
 const osReleaseFileName string = "os-release"
 
+// LinuxDistributionObject ...
+type LinuxDistributionObject struct {
+    OsReleaseFile     string
+    DistroReleaseFile string
+    OsReleaseInfo     map[string]string
+    LSBReleaseInfo    map[string]string
+    DistroReleaseInfo map[string]string
+}
+
+// LinuxDistribution ...
+func LinuxDistribution(d *LinuxDistributionObject) *LinuxDistributionObject {
+    if d == nil {
+        d = &LinuxDistributionObject{
+            OsReleaseFile: path.Join(unixEtcDir, osReleaseFileName),
+        }
+    }
+    d.OsReleaseInfo = d.GetOSReleaseFileInfo()
+    // d.LSBReleaseInfo = d.GetLSBReleaseInfo()
+    // d.DistroReleaseInfo = d.GetDistroReleaseFileInfo()
+    return d
+}
+
 // GetOSReleaseFileInfo retrieves parsed information from an
 // os-release file and returns a map with its key-value's
-func GetOSReleaseFileInfo() map[string]string {
-
+func (d *LinuxDistributionObject) GetOSReleaseFileInfo() map[string]string {
     defaultMap := make(map[string]string)
 
-    osReleaseFilePath := path.Join(unixEtcDir, osReleaseFileName)
-    if _, err := os.Stat(osReleaseFilePath); err == nil {
-        content := readFileContents(osReleaseFilePath)
-        printMap(parseOSReleaseFile(content))
+    if _, err := os.Stat(d.OsReleaseFile); err == nil {
+        content := readFileContents(d.OsReleaseFile)
+        // printMap(parseOSReleaseFile(content))
         return parseOSReleaseFile(content)
     }
     return defaultMap
@@ -34,7 +54,7 @@ func GetOSReleaseFileInfo() map[string]string {
 
 // GetLSBReleaseInfo retrieves parsed information from an
 // `lsb_release -a` command and returns a map with its key-value's
-func GetLSBReleaseInfo() map[string]string {
+func (d *LinuxDistributionObject) GetLSBReleaseInfo() map[string]string {
     defaultMap := make(map[string]string)
     var (
         cmdOut []byte
@@ -47,13 +67,13 @@ func GetLSBReleaseInfo() map[string]string {
         fmt.Fprintln(os.Stderr, "Failed to run lsb_release -a", err)
         return defaultMap
     }
-    printMap(parseLSBRelease(string(cmdOut)))
+    // printMap(parseLSBRelease(string(cmdOut)))
     return parseLSBRelease(string(cmdOut))
 }
 
 // GetDistroReleaseFileInfo retrieves parsed information from an
 // `lsb_release -a` command and returns a map with its key-value's
-func GetDistroReleaseFileInfo() map[string]string {
+func (d *LinuxDistributionObject) GetDistroReleaseFileInfo() map[string]string {
     defaultMap := make(map[string]string)
 
     ignoredBasenames := []string{
@@ -82,7 +102,8 @@ func GetDistroReleaseFileInfo() map[string]string {
             }
         }
     }
-    printMap(defaultMap)
+
+    // printMap(defaultMap)
     return defaultMap
 }
 
@@ -111,6 +132,7 @@ func parseOSReleaseFile(content string) map[string]string {
             props[strings.ToLower(kv[0])] = strings.Trim(kv[1], "\"")
         }
     }
+
     return props
 }
 
@@ -129,6 +151,7 @@ func parseLSBRelease(content string) map[string]string {
             props[key] = strings.TrimSpace(kv[1])
         }
     }
+
     return props
 }
 
@@ -150,7 +173,55 @@ func parseDistroReleaseFile(content string) map[string]string {
     } else if len(line) > 0 {
         props["name"] = strings.TrimSpace(line)
     }
+
     return props
+}
+
+func (d *LinuxDistributionObject) getOSReleaseAttribute(attribute string) string {
+    return d.OsReleaseInfo[attribute]
+}
+
+func (d *LinuxDistributionObject) getLSBReleaseAttribute(attribute string) string {
+    return d.LSBReleaseInfo[attribute]
+}
+
+func (d *LinuxDistributionObject) getDistroReleaseAttribute(attribute string) string {
+    return d.DistroReleaseInfo[attribute]
+}
+
+// Name returns the name of the distribution
+func (d *LinuxDistributionObject) Name(pretty bool) string {
+    var name string
+
+    name = d.getOSReleaseAttribute("name")
+    if len(name) == 0 {
+        name = d.getLSBReleaseAttribute("distributor_id")
+    }
+    if len(name) == 0 {
+        name = d.getDistroReleaseAttribute("name")
+    }
+    if pretty {
+        name = d.getOSReleaseAttribute("pretty_name")
+        if len(name) == 0 {
+            name = d.getLSBReleaseAttribute("description")
+        }
+        if len(name) == 0 {
+            name = d.getDistroReleaseAttribute("name")
+        }
+    }
+    return name
+    //     name = self.os_release_attr('name') \
+    //     or self.lsb_release_attr('distributor_id') \
+    //     or self.distro_release_attr('name')
+    // if pretty:
+    //     name = self.os_release_attr('pretty_name') \
+    //         or self.lsb_release_attr('description')
+    //     if not name:
+    //         name = self.distro_release_attr('name')
+    //         version = self.version(pretty=True)
+    //         if version:
+    //             name = name + ' ' + version
+    // return name or ''
 }
 
 func printMap(content map[string]string) {
@@ -187,7 +258,7 @@ func readFileContents(filePath string) string {
 }
 
 func main() {
-    GetOSReleaseFileInfo()
-    GetLSBReleaseInfo()
-    GetDistroReleaseFileInfo()
+    // Can also pass &LinuxDistributionObject{args} instead
+    d := LinuxDistribution(nil)
+    fmt.Println(d.Name(true))
 }
