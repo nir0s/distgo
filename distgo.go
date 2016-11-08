@@ -10,6 +10,7 @@ import (
     "os"
     "os/exec"
     "path"
+    // "reflect"
     "regexp"
     "strings"
 )
@@ -117,9 +118,9 @@ func parseOSReleaseFile(content string) map[string]string {
         if strings.Contains(element, "=") {
             kv := strings.Split(element, "=")
             if kv[0] == "VERSION" {
-                validID := regexp.MustCompile(`(\(\D+\))|,(\s+)?\D+`)
-                codenameFound := validID.MatchString(kv[1])
-                codename := validID.FindString(kv[1])
+                compiledPattern := regexp.MustCompile(`(\(\D+\))|,(\s+)?\D+`)
+                codenameFound := compiledPattern.MatchString(kv[1])
+                codename := compiledPattern.FindString(kv[1])
                 if codenameFound {
                     codename = strings.TrimSpace(codename)
                     codename = strings.Trim(codename, "()")
@@ -228,7 +229,7 @@ func (d *LinuxDistributionObject) Name(pretty bool) string {
 
 // Version returns the version of the distribution
 func (d *LinuxDistributionObject) Version(pretty bool, best bool) string {
-    versions := [5]string{
+    versions := []string{
         d.getOSReleaseAttribute("version_id"),
         d.getLSBReleaseAttribute("release"),
         d.getDistroReleaseAttribute("version_id"),
@@ -257,6 +258,39 @@ func (d *LinuxDistributionObject) Version(pretty bool, best bool) string {
     }
 
     return version
+}
+
+// VersionParts returns three values, one for each part of a distribution's version
+func (d *LinuxDistributionObject) VersionParts(best bool) (string, string, string) {
+    versionStr := d.Version(best, false)
+    if versionStr != "" {
+        compiledPattern := regexp.MustCompile(`(\d+)\.?(\d+)?\.?(\d+)?`)
+        matches := compiledPattern.FindAllStringSubmatch(versionStr, -1)
+        if len(matches) > 0 {
+            groups := matches[0]
+            major, minor, buildNumber := groups[1], groups[2], groups[3]
+            return major, minor, buildNumber
+        }
+    }
+    return "", "", ""
+}
+
+// MajorVersion returns the major version of the distribution
+func (d *LinuxDistributionObject) MajorVersion(best bool) string {
+    major, _, _ := d.VersionParts(best)
+    return major
+}
+
+// MinorVersion returns the minor version of the distribution
+func (d *LinuxDistributionObject) MinorVersion(best bool) string {
+    _, minor, _ := d.VersionParts(best)
+    return minor
+}
+
+// BuildNumber returns the build number of the distribution
+func (d *LinuxDistributionObject) BuildNumber(best bool) string {
+    _, _, buildNumber := d.VersionParts(best)
+    return buildNumber
 }
 
 func normalizeDistroID(id string, normalizationTable map[string]string) string {
@@ -317,6 +351,53 @@ func (d *LinuxDistributionObject) Codename() string {
     return codename
 }
 
+// Like returns the ID_LIKE field of an os-release file if applicable
+func (d *LinuxDistributionObject) Like() string {
+    return d.getOSReleaseAttribute("id_like")
+}
+
+type version struct {
+    Major       string
+    Minor       string
+    BuildNumber string
+}
+
+type info struct {
+    ID           string
+    Version      string
+    VersionParts version
+    Like         string
+    Codename     string
+}
+
+// func LinuxDistribution(d *LinuxDistributionObject) *LinuxDistributionObject {
+//     if d == nil {
+//         d = &LinuxDistributionObject{
+//             OsReleaseFile: path.Join(unixEtcDir, osReleaseFileName),
+//         }
+//     }
+//     d.OsReleaseInfo = d.GetOSReleaseFileInfo()
+//     // d.LSBReleaseInfo = d.GetLSBReleaseInfo()
+//     // d.DistroReleaseInfo = d.GetDistroReleaseFileInfo()
+//     return d
+
+// // Info returns a map of most of the data set extracted
+// func (d *LinuxDistributionObject) Info(pretty bool, best bool) *info {
+
+//     infoStruct := *info{
+//         ID:      d.ID(),
+//         Version: d.Version(pretty, best),
+//         VersionParts: version{
+//             Major:       d.MajorVersion(best),
+//             Minor:       d.MinorVersion(best),
+//             BuildNumber: d.BuildNumber(best),
+//         },
+//         Like:     d.Like(),
+//         Codename: d.Codename(),
+//     }
+//     return *infoStruct
+// }
+
 func printMap(content map[string]string) {
     fmt.Println("\n***********************************")
     for k, v := range content {
@@ -353,8 +434,11 @@ func readFileContents(filePath string) string {
 func main() {
     // Can also pass &LinuxDistributionObject{args} instead
     d := LinuxDistribution(nil)
-    fmt.Println(d.Name(true))
-    fmt.Println(d.Version(false, false))
-    fmt.Println(d.ID())
-    fmt.Println(d.Codename())
+    // fmt.Println(d.Name(true))
+    // fmt.Println(d.Version(false, false))
+    // fmt.Println(d.ID())
+    // fmt.Println(d.Codename())
+    // fmt.Println(d.VersionParts(false))
+    // fmt.Println(d.Info(false, false))
+    fmt.Println(d.LinuxDistrubtion())
 }
