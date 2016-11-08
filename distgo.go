@@ -192,36 +192,129 @@ func (d *LinuxDistributionObject) getDistroReleaseAttribute(attribute string) st
 // Name returns the name of the distribution
 func (d *LinuxDistributionObject) Name(pretty bool) string {
     var name string
-
-    name = d.getOSReleaseAttribute("name")
-    if len(name) == 0 {
-        name = d.getLSBReleaseAttribute("distributor_id")
+    names := []string{
+        d.getOSReleaseAttribute("name"),
+        d.getLSBReleaseAttribute("distributor_id"),
+        d.getDistroReleaseAttribute("name"),
     }
-    if len(name) == 0 {
-        name = d.getDistroReleaseAttribute("name")
+    prettyNames := []string{
+        d.getOSReleaseAttribute("pretty_name"),
+        d.getLSBReleaseAttribute("description"),
+        d.getDistroReleaseAttribute("name"),
+    }
+
+    for _, element := range names {
+        if name == "" {
+            name = element
+        }
     }
     if pretty {
-        name = d.getOSReleaseAttribute("pretty_name")
-        if len(name) == 0 {
-            name = d.getLSBReleaseAttribute("description")
+        for _, element := range prettyNames {
+            if name == "" {
+                name = element
+            }
         }
-        if len(name) == 0 {
+        if name == "" {
             name = d.getDistroReleaseAttribute("name")
+            version := d.Version(true, false)
+            if version != "" {
+                name = name + " " + version
+            }
         }
     }
+
     return name
-    //     name = self.os_release_attr('name') \
-    //     or self.lsb_release_attr('distributor_id') \
-    //     or self.distro_release_attr('name')
-    // if pretty:
-    //     name = self.os_release_attr('pretty_name') \
-    //         or self.lsb_release_attr('description')
-    //     if not name:
-    //         name = self.distro_release_attr('name')
-    //         version = self.version(pretty=True)
-    //         if version:
-    //             name = name + ' ' + version
-    // return name or ''
+}
+
+// Version returns the version of the distribution
+func (d *LinuxDistributionObject) Version(pretty bool, best bool) string {
+    versions := [5]string{
+        d.getOSReleaseAttribute("version_id"),
+        d.getLSBReleaseAttribute("release"),
+        d.getDistroReleaseAttribute("version_id"),
+        parseDistroReleaseFile(d.getOSReleaseAttribute("pretty_name"))["version_id"],
+        parseDistroReleaseFile(d.getLSBReleaseAttribute("description"))["version_id"],
+    }
+    version := ""
+
+    if best {
+        for _, element := range versions {
+            if strings.Count("element", ".") > strings.Count(version, ".") || version == "" {
+                version = element
+            }
+        }
+    } else {
+        for _, element := range versions {
+            if element != "" {
+                version = element
+                break
+            }
+        }
+    }
+    // && codename
+    if pretty && version != "" {
+        version = version + "(" + ")"
+    }
+
+    return version
+}
+
+func normalizeDistroID(id string, normalizationTable map[string]string) string {
+    distroID := strings.ToLower(id)
+    distroID = strings.Replace(distroID, " ", "_", -1)
+    normalizedID := normalizationTable[distroID]
+    if normalizedID == "" {
+        normalizedID = distroID
+    }
+    return normalizedID
+}
+
+// ID returns the id of the distribution
+func (d *LinuxDistributionObject) ID() string {
+    var distroID string
+
+    normalizedOSIDTable := map[string]string{}
+    normalizedLSBIDTable := map[string]string{
+        "enterpriseenterprise":        "oracle",
+        "redhatenterpriseworkstation": "rhel",
+    }
+    normalizedDistroIDTable := map[string]string{
+        "redhat": "rhel",
+    }
+
+    distroID = d.getOSReleaseAttribute("id")
+    if distroID != "" {
+        return normalizeDistroID(distroID, normalizedOSIDTable)
+    }
+    distroID = d.getLSBReleaseAttribute("distributor_id")
+    if distroID != "" {
+        return normalizeDistroID(distroID, normalizedLSBIDTable)
+    }
+    distroID = d.getDistroReleaseAttribute("id")
+    if distroID != "" {
+        return normalizeDistroID(distroID, normalizedDistroIDTable)
+    }
+
+    return distroID
+}
+
+// Codename returns the distribution's codename
+func (d *LinuxDistributionObject) Codename() string {
+    var codename string
+
+    codenames := []string{
+        d.getOSReleaseAttribute("codename"),
+        d.getLSBReleaseAttribute("codename"),
+        d.getDistroReleaseAttribute("codename"),
+    }
+
+    for _, element := range codenames {
+        if codename == "" {
+            codename = element
+        }
+    }
+
+    return codename
 }
 
 func printMap(content map[string]string) {
@@ -261,4 +354,7 @@ func main() {
     // Can also pass &LinuxDistributionObject{args} instead
     d := LinuxDistribution(nil)
     fmt.Println(d.Name(true))
+    fmt.Println(d.Version(false, false))
+    fmt.Println(d.ID())
+    fmt.Println(d.Codename())
 }
